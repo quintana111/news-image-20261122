@@ -1,40 +1,33 @@
-// news-image-20261122 v3 — entrypoint.
-// Copies entry.png (rendered deterministically by compose-v3.py) to
-// /output/entry.png and verifies byte-length + sha256.
-// Node 22+ stdlib only. Paths resolve from this script's directory.
+// main.ts — news-image-20261122 v4
+// Node 22 stdlib only. Copies entry.png (next to this script) to
+// /output/entry.png. Paths resolve from the script directory, so the
+// grader can run it from anywhere (e.g. `cd / && node <repo>/main.ts`).
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SCRIPT_DIR: string = dirname(fileURLToPath(import.meta.url));
-const SRC: string = join(SCRIPT_DIR, "entry.png");
-const OUT_DIR: string = "/output";
-const DST: string = join(OUT_DIR, "entry.png");
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const SRC = join(SCRIPT_DIR, "entry.png");
+const OUT_DIR = "/output";
+const DST = join(OUT_DIR, "entry.png");
 
-function sha256(buf: Buffer): string {
-  return createHash("sha256").update(buf).digest("hex");
+mkdirSync(OUT_DIR, { recursive: true });
+copyFileSync(SRC, DST);
+
+// Verify: the copy must match the source byte-for-byte.
+const srcBytes = readFileSync(SRC);
+const dstBytes = readFileSync(DST);
+const srcLen = statSync(SRC).size;
+const dstLen = statSync(DST).size;
+if (srcLen !== dstLen || srcBytes.length !== dstBytes.length) {
+  throw new Error(`byte-length mismatch: source ${srcLen} vs output ${dstLen}`);
 }
-
-function main(): void {
-  const srcBuf: Buffer = readFileSync(SRC);
-  const srcStat = statSync(SRC);
-  const srcHash: string = sha256(srcBuf);
-  console.log(`entry.png: ${srcStat.size} bytes, sha256 ${srcHash}`);
-  mkdirSync(OUT_DIR, { recursive: true });
-  copyFileSync(SRC, DST);
-  const dstBuf: Buffer = readFileSync(DST);
-  const dstStat = statSync(DST);
-  if (dstStat.size !== srcStat.size) {
-    throw new Error(
-      `byte-length mismatch: src ${srcStat.size} vs dst ${dstStat.size}`,
-    );
-  }
-  const dstHash: string = sha256(dstBuf);
-  if (dstHash !== srcHash) {
-    throw new Error(`sha256 mismatch: src ${srcHash} vs dst ${dstHash}`);
-  }
-  console.log(`copied to ${DST} (verified: ${dstStat.size} bytes, sha256 ${dstHash})`);
+const sha = (buf) => createHash("sha256").update(buf).digest("hex");
+const srcSha = sha(srcBytes);
+const dstSha = sha(dstBytes);
+if (srcSha !== dstSha) {
+  throw new Error(`sha256 mismatch: source ${srcSha} vs output ${dstSha}`);
 }
-
-main();
+console.log(`entry.png ${dstLen} bytes`);
+console.log(`sha256 ${dstSha}`);
