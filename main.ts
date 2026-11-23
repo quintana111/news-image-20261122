@@ -1,26 +1,40 @@
-// news-image-20261122 v2 — entry runner.
-// Node 22, stdlib only. Copies the pre-rendered entry.png that ships in
-// this repo to /output/entry.png, verifying it byte-for-byte.
-// No network, no wall clock, no files outside this repo directory.
+// news-image-20261122 v3 — entrypoint.
+// Copies entry.png (rendered deterministically by compose-v3.py) to
+// /output/entry.png and verifies byte-length + sha256.
+// Node 22+ stdlib only. Paths resolve from this script's directory.
 import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const src = join(here, "entry.png");
-const outDir = "/output";
-const dst = join(outDir, "entry.png");
+const SCRIPT_DIR: string = dirname(fileURLToPath(import.meta.url));
+const SRC: string = join(SCRIPT_DIR, "entry.png");
+const OUT_DIR: string = "/output";
+const DST: string = join(OUT_DIR, "entry.png");
 
-const data = readFileSync(src);
-mkdirSync(outDir, { recursive: true });
-copyFileSync(src, dst);
-
-// Verify: the copy must match the shipped file byte-for-byte.
-const written = readFileSync(dst);
-if (written.length !== data.length || !written.equals(data)) {
-  console.error("entry.png copy mismatch: byte length or contents differ");
-  process.exit(1);
+function sha256(buf: Buffer): string {
+  return createHash("sha256").update(buf).digest("hex");
 }
-const sha256 = createHash("sha256").update(written).digest("hex");
-console.log(`${dst} ${written.length} bytes sha256=${sha256}`);
+
+function main(): void {
+  const srcBuf: Buffer = readFileSync(SRC);
+  const srcStat = statSync(SRC);
+  const srcHash: string = sha256(srcBuf);
+  console.log(`entry.png: ${srcStat.size} bytes, sha256 ${srcHash}`);
+  mkdirSync(OUT_DIR, { recursive: true });
+  copyFileSync(SRC, DST);
+  const dstBuf: Buffer = readFileSync(DST);
+  const dstStat = statSync(DST);
+  if (dstStat.size !== srcStat.size) {
+    throw new Error(
+      `byte-length mismatch: src ${srcStat.size} vs dst ${dstStat.size}`,
+    );
+  }
+  const dstHash: string = sha256(dstBuf);
+  if (dstHash !== srcHash) {
+    throw new Error(`sha256 mismatch: src ${srcHash} vs dst ${dstHash}`);
+  }
+  console.log(`copied to ${DST} (verified: ${dstStat.size} bytes, sha256 ${dstHash})`);
+}
+
+main();
